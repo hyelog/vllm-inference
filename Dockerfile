@@ -24,6 +24,10 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 # 3. Python 의존성 설치
 RUN pip install --no-cache-dir torch==2.1.2 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
+# Pillow-simd 설치 (이미지 처리 성능 향상)
+RUN pip uninstall -y Pillow && \
+    CC="cc -mavx2" pip install -U --force-reinstall Pillow-simd --no-cache-dir
+
 # vLLM 및 기타 패키지 설치
 RUN pip install --no-cache-dir \
     vllm==${VLLM_VERSION} \
@@ -31,12 +35,7 @@ RUN pip install --no-cache-dir \
 
 # 4. 애플리케이션 코드 복사
 WORKDIR /app
-COPY ./run_openai_server_with_custom_lora.py /app/run_openai_server_with_custom_lora.py
-
-# (선택 사항) LoRA 어댑터 파일들을 이미지에 포함시키는 경우:
-# Docker 빌드 컨텍스트에 lora_adapters 디렉토리가 있다고 가정합니다.
-# RUN mkdir -p /app/lora_adapters/my_custom_lora_1
-# COPY ./lora_adapters/my_custom_lora_1 /app/lora_adapters/my_custom_lora_1
+COPY ./run_multimodal_server.py /app/run_multimodal_server.py
 
 # 5. 포트 노출 (vLLM OpenAI API 서버 기본 포트)
 EXPOSE 8000
@@ -45,12 +44,12 @@ EXPOSE 8000
 ENV HF_HOME=/app/huggingface_cache
 RUN mkdir -p $HF_HOME
 
-CMD ["python", "/app/run_openai_server_with_custom_lora.py", \
+CMD ["python", "/app/run_multimodal_server.py", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
-     "--model", "mistralai/Mistral-7B-Instruct-v0.1", \
-     "--tokenizer", "mistralai/Mistral-7B-Instruct-v0.1", \
-     "--enable-lora", \
-     "--max-loras", "5", \
-     "--max-lora-rank", "64" \
+     "--model", "llava-hf/llava-1.5-7b-hf", \
+     "--tokenizer", "llava-hf/llava-1.5-7b-hf", \
+     # "--image-input-type", "pixel_values", # vLLM이 자동 감지 시도
+     # "--chat-template", "/path/to/llava_chat_template.jinja", # 필요시 LLaVA 챗 템플릿 경로 지정
+     "--disable-log-stats" \
     ]
